@@ -1,0 +1,370 @@
+/* Replica of the Ziton ZP3 front panel. Uses fixed hardware colours in both themes. */
+.zp3 {
+  container-type: inline-size;
+  background: var(--enclosure);
+  border-radius: 10px;
+  padding: 12px;
+  box-shadow: inset 0 0 0 2px rgb(0 0 0 / 0.15), var(--shadow);
+  color: #fff;
+}
+.zp3-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.zp3-tag {
+  background: #4b86c4;
+  color: #e3322a;
+  font: 700 clamp(13px, 3cqw, 20px) / 1 var(--f-display);
+  padding: 4px 10px;
+  letter-spacing: 0.02em;
+}
+.zp3-tag b {
+  background: #fff;
+  color: #000;
+  padding: 0 6px;
+  margin-left: 6px;
+}
+.zp3-brand {
+  font: 700 clamp(13px, 2.6cqw, 18px) / 1 var(--f-display);
+  letter-spacing: 0.08em;
+  color: #fff;
+  opacity: 0.9;
+}
+.fascia {
+  background: #b9c0b8;
+  border-radius: 6px;
+  padding: clamp(8px, 2cqw, 16px);
+}
+.fascia-in {
+  background: var(--fascia);
+  border-radius: 6px;
+  padding: clamp(6px, 1.6cqw, 14px);
+  display: grid;
+  gap: clamp(6px, 1.4cqw, 12px);
+}
+.zp3-row {
+  background: var(--fascia-dark);
+  border: 1px solid var(--fascia-line);
+  border-radius: 14px;
+  padding: clamp(6px, 1.4cqw, 12px);
+}
+.r1 {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: clamp(6px, 1.4cqw, 14px);
+  align-items: center;
+}
+.leftkeys,
+.morekeys {
+  display: grid;
+  gap: clamp(6px, 1.6cqw, 14px);
+}
+.lk {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lk span,
+.zp3 .lbl {
+  font: 600 clamp(9px, 1.7cqw, 13px) / 1.05 var(--f-body);
+  text-transform: uppercase;
+  color: #e9eef5;
+  letter-spacing: 0.01em;
+}
+.morekeys {
+  justify-items: center;
+}
+.morekeys .lbl {
+  margin: -2px 0;
+}
+.k {
+  width: clamp(30px, 6cqw, 48px);
+  height: clamp(20px, 3.8cqw, 30px);
+  border-radius: 5px;
+  border: 0;
+  background: linear-gradient(180deg, var(--key-hi), var(--key));
+  box-shadow: 0 3px 0 #18237a, inset 0 1px 0 rgb(255 255 255 / 0.25);
+  padding: 0;
+  flex: none;
+}
+.k:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 #18237a;
+}
+.k:focus-visible {
+  outline: 2px solid #ffe066;
+}
+.k.locked {
+  filter: saturate(0.6);
+}
+
+.lcd {
+  background: var(--lcd);
+  color: var(--lcd-ink);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 3px #8db21f, inset 0 0 18px rgb(60 90 0 / 0.35);
+  padding: clamp(4px, 1cqw, 10px) clamp(5px, 1.2cqw, 12px);
+  font-family: var(--f-lcd);
+  font-size: clamp(9px, calc((100cqw - 270px) / 27), 24px);
+  line-height: 1.12;
+  white-space: pre;
+  overflow: hidden;
+  min-width: 0;
+}
+.lcd div {
+  overflow: hidden;
+}
+
+.r2 {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: clamp(4px, 1cqw, 10px);
+  align-items: end;
+}
+.cell {
+  display: grid;
+  justify-items: center;
+  gap: clamp(3px, 0.8cqw, 7px);
+  text-align: center;
+}
+.cell .lbl {
+  min-height: 2.1em;
+  display: flex;
+  align-items: flex-end;
+}
+.lamp {
+  width: clamp(16px, 3.6cqw, 30px);
+  height: clamp(10px, 2.2cqw, 18px);
+  border: 2px solid #c8d0d8;
+  background: var(--led-off);
+}
+.lamp.red.on {
+  background: #ff2a1f;
+  box-shadow: 0 0 10px #ff2a1f;
+}
+.lamp.amber.on {
+  background: #ffb21a;
+  box-shadow: 0 0 10px #ffb21a;
+}
+.lamp.yellow.on {
+  background: #ffe33a;
+  box-shadow: 0 0 10px #ffe33a;
+}
+.lamp.empty {
+  visibility: hidden;
+}
+.on.flash {
+  animation: flash 1s steps(1) infinite;
+}
+@keyframes flash {
+  50% {
+    background: var(--led-off);
+    box-shadow: none;
+  }
+}
+
+.r3 {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: clamp(6px, 1.4cqw, 14px);
+  align-items: center;
+}
+.modes {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+}
+.modes .m {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.pled {
+  display: inline-block;
+  width: clamp(7px, 1.3cqw, 10px);
+  height: clamp(7px, 1.3cqw, 10px);
+  background: #4a4628;
+  border-radius: 2px;
+  flex: none;
+}
+.pled.on {
+  background: #ffcf2e;
+  box-shadow: 0 0 6px #ffcf2e;
+}
+.pled.green.on {
+  background: #3dff6b;
+  box-shadow: 0 0 6px #3dff6b;
+}
+.matrix {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: inherit;
+}
+.matrix th,
+.matrix td {
+  position: static;
+  background: none;
+  border: 1px solid var(--fascia-line);
+  padding: clamp(1px, 0.4cqw, 4px) clamp(2px, 0.6cqw, 6px);
+  font: 600 clamp(7px, 1.4cqw, 11.5px) / 1.1 var(--f-body);
+  color: #e9eef5;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  text-align: center;
+}
+.matrix th:first-child,
+.matrix td:first-child {
+  text-align: left;
+  white-space: nowrap;
+}
+.matrix td .pled {
+  display: block;
+  margin: auto;
+}
+.matrix {
+  table-layout: fixed;
+}
+.matrix th:first-child {
+  width: 25%;
+}
+.sw {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  text-align: center;
+}
+.keyswitch {
+  width: clamp(38px, 7cqw, 56px);
+  height: clamp(38px, 7cqw, 56px);
+  border-radius: 6px;
+  background: #1a1a1a;
+  border: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+.keyswitch i {
+  width: 70%;
+  height: 70%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff, #9aa3ab 60%, #5a6168);
+  position: relative;
+  transition: transform 0.2s;
+}
+.keyswitch i::after {
+  content: '';
+  position: absolute;
+  left: 46%;
+  top: 14%;
+  width: 8%;
+  height: 72%;
+  background: #222;
+  border-radius: 2px;
+}
+.keyswitch.on i {
+  transform: rotate(-90deg);
+}
+.swlbl {
+  display: flex;
+  gap: 8px;
+}
+
+.lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  margin-top: 12px;
+}
+.plate {
+  background: #b9c0b8;
+  border-radius: 6px;
+  padding: 10px;
+  color: #1d2a38;
+  font-size: clamp(10px, 1.7cqw, 12.5px);
+  line-height: 1.35;
+}
+.plate h4 {
+  margin: 0 0 4px;
+  font: 700 clamp(11px, 2cqw, 15px) / 1.1 var(--f-display);
+  text-transform: uppercase;
+  color: #1d2a38;
+}
+.plate ol {
+  margin: 0;
+  padding-left: 1.2em;
+}
+.keypad {
+  background: #4f7da6;
+  border: 2px solid #c7ccd2;
+  border-radius: 4px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(5, clamp(30px, 6.6cqw, 44px));
+  gap: 6px;
+}
+.kp {
+  height: clamp(26px, 5cqw, 34px);
+  border-radius: 5px;
+  border: 0;
+  background: linear-gradient(180deg, #3f5ed9, #2a43b8);
+  color: #fff;
+  font: 600 clamp(10px, 1.8cqw, 13px) / 1 var(--f-body);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  box-shadow: 0 2px 0 #18237a;
+}
+.kp small {
+  display: block;
+  font-size: 0.65em;
+  opacity: 0.85;
+}
+.kp:active {
+  transform: translateY(1px);
+}
+
+@container (max-width: 560px) {
+  .r1 {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .r1 .leftkeys {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr 1fr;
+    order: 2;
+  }
+  .r1 .lcd {
+    order: 0;
+    grid-column: 1 / -1;
+    font-size: calc((100cqw - 56px) / 27);
+  }
+  .r1 .morekeys {
+    grid-template-columns: repeat(5, auto);
+    align-items: center;
+    justify-content: end;
+  }
+  .r1 .morekeys {
+    order: 1;
+  }
+  .r2 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    row-gap: 12px;
+  }
+  .r3 {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .r3 .mx {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+  .lower {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .keypad {
+    justify-self: center;
+  }
+}
