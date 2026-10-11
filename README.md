@@ -50,6 +50,8 @@ then set `VITE_GATEWAY_URL=wss://<your-gateway>/ws` in the Vercel project's envi
 | Master mimic | Sprinkler and hosereel pump/tank status (1010–1023), control valve 1032, 2nd–12th storey addressing grid, roof, 1st storey, basements |
 | Diagnostics | All points with live A1 value, condition and six analog channels, threshold chart, disable/enable |
 | Event log | Panel events and the operator audit trail (who did what, from where) |
+| Bypass | Isolate a faulty device from the app: reason required, 1–24 h limit, auto re-enable when time ends, extend or restore early |
+| Connection health | App ↔ gateway, gateway ↔ panel link, mains, batteries, data age; backup gateway failover and last-known status |
 | Simulator | Fires, call points, sprinkler flow, pump run/trip, tank levels, dirty detector, mains/battery/earth faults, repair devices |
 
 ## Panel behaviour modelled
@@ -60,6 +62,18 @@ then set `VITE_GATEWAY_URL=wss://<your-gateway>/ws` in the Vercel project's envi
 - **Day mode** gives detectors a 30 s investigation delay before sounders operate; call points and flow switches alarm immediately; *More time* adds 60 s.
 - **New fire after silence** re-sounds the alarms. Fire also signals the remote alarm (DECAM) output.
 - **Analog model**: smoke ≈ 032 clean air, fire threshold 135, pre-alarm at 75 %; input modules 016 normal, ~064 active, ≥138 open/short circuit, ≤4 no response.
+
+## Bypass and failover
+
+- **Device bypass** (access level 3): a faulty device is isolated with a reason and a time limit (max 24 h). While bypassed
+  it does not report fire or fault, so one bad detector does not hold the whole panel in fault. When the time ends it is
+  re-enabled automatically, the buzzer sounds and the event is logged. Bypass, extend and restore are all audited.
+- **Gateway failover**: put several gateway addresses in the Connection tab, comma separated (main first). If one stops
+  answering, the app moves to the next and shows a "connected through backup" banner.
+- **Last-known status**: if no gateway answers, the app keeps the last panel view, shows its age, and blocks commands.
+- **Panel link down**: if the gateway stops receiving data from the panel (cable or card), values freeze, commands are
+  blocked and the app tells the operator to use the panel and call FPC.
+- The app never falls back to simulated data while connected to a real panel.
 
 ## Architecture
 

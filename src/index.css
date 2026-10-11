@@ -338,6 +338,7 @@ button {
 .btn.sm {
   padding: 3px 9px;
   font-size: 12px;
+  white-space: nowrap;
 }
 .btn:disabled {
   opacity: 0.5;
@@ -666,4 +667,86 @@ tbody tr:hover td {
   background: var(--surface-2);
   border-radius: 0 6px 6px 0;
   font-size: 13px;
+}
+
+/* ---------- bypass ---------- */
+.byp-list {
+  display: grid;
+  gap: 8px;
+}
+.byp-row {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--fault);
+  border-radius: 0 8px 8px 0;
+  background: var(--surface-2);
+  min-width: 0;
+}
+.byp-name {
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: left;
+}
+.byp-row select {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  min-width: 0;
+  max-width: 100%;
+}
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--fault);
+  background: color-mix(in srgb, var(--fault) 12%, var(--surface));
+  font-weight: 500;
+}
+.banner.bad {
+  border-color: var(--fire);
+  background: color-mix(in srgb, var(--fire) 12%, var(--surface));
+}
+.health {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.hrow {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.hrow:last-child {
+  border-bottom: 0;
+}
+.hdot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.hdot.ok {
+  background: var(--ok);
+}
+.hdot.bad {
+  background: var(--fire);
+}
+.hdot.warn {
+  background: var(--fault);
+}
+.stale {
+  filter: grayscale(0.6);
+  opacity: 0.85;
 }

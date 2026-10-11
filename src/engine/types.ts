@@ -62,6 +62,7 @@ export type EventKind =
   | 'ACCEPT'
   | 'ACCESS'
   | 'SYSTEM'
+  | 'BYPASS'
   | 'SIM';
 
 export interface PanelEvent {
@@ -135,6 +136,15 @@ export interface SystemStatus {
   chargerFault: boolean;
 }
 
+/** A time-limited isolation of a faulty device, made from the app. */
+export interface Bypass {
+  address: number;
+  reason: string;
+  at: number;
+  until: number;
+  by: string;
+}
+
 export interface PanelState {
   model: string;
   panelNo: number;
@@ -160,6 +170,10 @@ export interface PanelState {
   seq: number;
   /** Point addresses in the order they were disabled (panel lists them this way). */
   disabledOrder: number[];
+  /** Active software bypasses (subset of disabled points, each with an expiry). */
+  bypasses: Bypass[];
+  /** Gateway-to-panel link. When down, point data is frozen at its last value. */
+  link: { panel: boolean; since: number };
   screen: Screen;
   lastKeyAt: number;
 }
@@ -170,6 +184,7 @@ export type SimAction =
   | { a: 'mains'; ok: boolean }
   | { a: 'battery'; volts: number }
   | { a: 'earth'; fault: boolean }
+  | { a: 'link'; ok: boolean }
   | { a: 'preset'; name: 'site' | 'clean' };
 
 export type Command =
@@ -178,6 +193,8 @@ export type Command =
   | { t: 'login'; password: string }
   | { t: 'logout' }
   | { t: 'setDisabled'; target: 'point' | 'zone'; addr: number; disabled: boolean }
+  | { t: 'bypass'; addr: number; reason: string; minutes: number }
+  | { t: 'unbypass'; addr: number }
   | { t: 'sim'; action: SimAction };
 
 export interface CommandResult {

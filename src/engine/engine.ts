@@ -31,6 +31,8 @@ export interface EngineOptions {
 const TYPE_CODE = { smoke: 12, heat: 24, mcp: 40, input: 79, flow: 79, output: 88 } as const;
 const LEVEL3_MS = 10 * 60_000;
 const SCREEN_TIMEOUT_MS = 2 * 60_000;
+export const MAX_BYPASS_MIN = 24 * 60;
+const fmtMin = (m: number) => (m % 60 === 0 ? `${m / 60}H` : `${m} MIN`);
 
 export interface ListEntry {
   zone?: Zone;
@@ -83,6 +85,8 @@ export class PanelEngine {
       events: [],
       seq: 0,
       disabledOrder: [],
+      bypasses: [],
+      link: { panel: true, since: now },
       screen: { s: 'auto' },
       lastKeyAt: 0,
     };
@@ -287,7 +291,9 @@ export class PanelEngine {
       this.log('FIRE', `FIRE ${p.address} ${p.id}`, `${where} - ${p.desc}`, 'panel', p, t);
       this.onFire(p);
     }
-    if (raw.cond === 'Fault' && !p.latchedFault) {
+    // A software bypass also stops the device's faults from holding the panel in fault.
+    const bypassed = s.bypasses.some((b) => b.address === p.address);
+    if (raw.cond === 'Fault' && !p.latchedFault && !bypassed) {
       p.latchedFault = t;
       p.faultText = raw.fault;
       this.log('FAULT', `FAULT ${p.address} ${p.id}`, `${where} - ${raw.fault}`, 'panel', p, t);
@@ -369,10 +375,17 @@ export class PanelEngine {
     const s = this.state;
     s.now = this.clock();
     s.tick += 1;
+    if (!s.link.panel) {
+      // No data from the panel: keep the last known values frozen.
+      if (s.screen.s === 'message' && s.now >= s.screen.until) s.screen = s.screen.back;
+      this.notify();
+      return;
+    }
     for (const p of s.points) {
       this.sample(p);
       this.evaluate(p, s.now);
     }
+    this.expireBypasses();
     if (!s.system.mains) s.system.batteryV = Math.max(20.5, +(s.system.batteryV - 0.01).toFixed(3));
     else if (s.system.batteryV < 27.3) s.system.batteryV = Math.min(27.3, +(s.system.batteryV + 0.05).toFixed(3));
     this.evaluateSystem();
@@ -445,6 +458,11 @@ export class PanelEngine {
     const s = this.state;
     s.now = this.clock();
     let r: CommandResult;
+    if (!s.link.panel && cmd.t !== 'sim') {
+      r = { ok: false, message: 'Panel link is down - operate at the panel and call FPC' };
+      this.notify();
+      return r;
+    }
     switch (cmd.t) {
       case 'key':
         s.lastKeyAt = s.now;
@@ -466,14 +484,22 @@ export class PanelEngine {
       case 'setDisabled':
         r = this.setDisabled(cmd.target, cmd.addr, cmd.disabled, actor);
         break;
+      case 'bypass':
+        r = this.bypass(cmd.addr, cmd.reason, cmd.minutes, actor);
+        break;
+      case 'unbypass':
+        r = this.unbypass(cmd.addr, actor, false);
+        break;
       case 'sim':
         r = this.sim(cmd.action, actor);
         break;
     }
     // Re-evaluate immediately so the result is visible without waiting a tick.
     // (this.state may have been replaced by a preset load.)
-    for (const p of this.state.points) this.evaluate(p, this.state.now);
-    this.evaluateSystem();
+    if (this.state.link.panel) {
+      for (const p of this.state.points) this.evaluate(p, this.state.now);
+      this.evaluateSystem();
+    }
     this.notify();
     return r;
   }
@@ -514,6 +540,7 @@ export class PanelEngine {
       if (!p) return { ok: false, message: `Point ${addr} not found` };
       if (p.disabled === disabled) return { ok: true, message: `Point ${addr} already ${disabled ? 'disabled' : 'enabled'}` };
       p.disabled = disabled;
+      s.bypasses = s.bypasses.filter((b) => b.address !== addr);
       s.disabledOrder = s.disabledOrder.filter((a) => a !== addr);
       if (disabled) s.disabledOrder.push(addr);
       this.log(disabled ? 'DISABLE' : 'ENABLE', `POINT ${addr} ${disabled ? 'DISABLED' : 'ENABLED'}`, p.desc, actor, p);
@@ -524,6 +551,60 @@ export class PanelEngine {
     z.disabled = disabled;
     this.log(disabled ? 'DISABLE' : 'ENABLE', `ZONE ${addr} ${disabled ? 'DISABLED' : 'ENABLED'}`, z.name, actor);
     return { ok: true, message: `Zone ${addr} ${disabled ? 'disabled' : 'enabled'}` };
+  }
+
+  /** Isolate a device for a limited time, with a recorded reason. */
+  bypass(addr: number, reason: string, minutes: number, actor: string): CommandResult {
+    const denied = this.need(3, 'Bypass');
+    if (denied) return denied;
+    const s = this.state;
+    const p = this.point(addr);
+    if (!p) return { ok: false, message: `Point ${addr} not found` };
+    const why = reason.trim();
+    if (why.length < 3) return { ok: false, message: 'Enter a reason for the bypass' };
+    if (!(minutes >= 1 && minutes <= MAX_BYPASS_MIN)) return { ok: false, message: 'Bypass time must be 1 minute to 24 hours' };
+    const existing = s.bypasses.find((b) => b.address === addr);
+    if (p.disabled && !existing) return { ok: false, message: `Point ${addr} is already disabled at the panel` };
+    const until = s.now + minutes * 60_000;
+    if (existing) {
+      existing.until = until;
+      existing.reason = why;
+      this.log('BYPASS', `POINT ${addr} BYPASS EXTENDED ${fmtMin(minutes)}`, why, actor, p);
+      return { ok: true, message: `Bypass on ${addr} extended to ${fmtMin(minutes)}` };
+    }
+    p.disabled = true;
+    s.disabledOrder = s.disabledOrder.filter((a) => a !== addr);
+    s.disabledOrder.push(addr);
+    s.bypasses.push({ address: addr, reason: why, at: s.now, until, by: actor });
+    // Clear the device's latched fault now; it stays suppressed while bypassed.
+    p.latchedFault = undefined;
+    p.faultText = undefined;
+    if (p.cond === 'Fault') p.cond = 'Normal';
+    this.log('BYPASS', `POINT ${addr} BYPASSED ${fmtMin(minutes)}`, `${p.desc} - ${why}`, actor, p);
+    return { ok: true, message: `Point ${addr} bypassed for ${fmtMin(minutes)}` };
+  }
+
+  /** End a bypass: the device is enabled again and reports normally. */
+  unbypass(addr: number, actor: string, expired: boolean): CommandResult {
+    if (!expired) {
+      const denied = this.need(3, 'Restore');
+      if (denied) return denied;
+    }
+    const s = this.state;
+    const b = s.bypasses.find((x) => x.address === addr);
+    const p = this.point(addr);
+    if (!b || !p) return { ok: false, message: `Point ${addr} is not bypassed` };
+    s.bypasses = s.bypasses.filter((x) => x !== b);
+    p.disabled = false;
+    s.disabledOrder = s.disabledOrder.filter((a) => a !== addr);
+    this.log('ENABLE', `POINT ${addr} ${expired ? 'BYPASS EXPIRED - RE-ENABLED' : 'BYPASS ENDED - RE-ENABLED'}`, p.desc, actor, p);
+    if (expired) s.buzzer = true;
+    return { ok: true, message: `Point ${addr} back in service` };
+  }
+
+  private expireBypasses() {
+    const s = this.state;
+    for (const b of [...s.bypasses]) if (b.until <= s.now) this.unbypass(b.address, 'panel (timer)', true);
   }
 
   reset(actor: string): CommandResult {
@@ -822,6 +903,10 @@ export class PanelEngine {
         s.system.earthFault = a.fault;
         this.log('SIM', `SIM earth fault ${a.fault ? 'on' : 'off'}`, undefined, actor);
         return { ok: true, message: `Earth fault ${a.fault ? 'on' : 'cleared'}` };
+      case 'link':
+        s.link = { panel: a.ok, since: s.now };
+        this.log('SIM', `SIM panel link ${a.ok ? 'restored' : 'lost'}`, a.ok ? undefined : 'Serial cable / interface card not responding', actor);
+        return { ok: true, message: a.ok ? 'Panel link restored' : 'Panel link lost - data frozen' };
       case 'preset': {
         const keep = this.listeners;
         this.state = this.initial(a.name);

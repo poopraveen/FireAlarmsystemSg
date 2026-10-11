@@ -49,6 +49,8 @@ const SCENARIOS: { group: string; items: Scenario[] }[] = [
       { title: 'Battery low', body: 'Battery set to 22.4V.', cmds: [{ t: 'sim', action: { a: 'battery', volts: 22.4 } }] },
       { title: 'Earth fault', body: 'Wiring earth leakage.', cmds: [{ t: 'sim', action: { a: 'earth', fault: true } }] },
       { title: 'Clear earth fault', body: '', cmds: [{ t: 'sim', action: { a: 'earth', fault: false } }] },
+      { title: 'Panel link lost', body: 'Serial cable unplugged: data freezes, commands blocked.', cmds: [{ t: 'sim', action: { a: 'link', ok: false } }] },
+      { title: 'Panel link restored', body: 'Cable back in: live data resumes.', cmds: [{ t: 'sim', action: { a: 'link', ok: true } }] },
     ],
   },
 ];

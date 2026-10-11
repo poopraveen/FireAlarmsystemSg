@@ -120,3 +120,55 @@ describe('fire behaviour', () => {
     expect(e.counts().fire).toBe(0);
   });
 });
+
+describe('software bypass', () => {
+  it('needs level 3 and a reason, clears the fault from the panel lists, and expires', () => {
+    const { e, advance } = make();
+    expect(e.dispatch({ t: 'bypass', addr: 1011, reason: 'Wiring fault', minutes: 60 }).ok).toBe(false);
+    e.dispatch({ t: 'login', password: '1234' });
+    expect(e.dispatch({ t: 'bypass', addr: 1011, reason: '', minutes: 60 }).ok).toBe(false);
+    expect(e.dispatch({ t: 'bypass', addr: 1011, reason: 'Wiring fault', minutes: 60 }).ok).toBe(true);
+    expect(e.point(1011)!.disabled).toBe(true);
+    expect(e.state.bypasses).toHaveLength(1);
+    e.dispatch({ t: 'keyswitch', on: true });
+    e.dispatch({ t: 'key', key: 'RESET' });
+    expect(e.counts().fault).toBe(1); // only 1029 left; 1011 is bypassed
+    advance(61 * 60_000);
+    e.tick();
+    expect(e.state.bypasses).toHaveLength(0);
+    expect(e.point(1011)!.disabled).toBe(false);
+    expect(e.state.events.some((x) => x.text.includes('BYPASS EXPIRED'))).toBe(true);
+  });
+
+  it('refuses to bypass a point already disabled at the panel', () => {
+    const { e } = make();
+    e.dispatch({ t: 'login', password: '1234' });
+    expect(e.dispatch({ t: 'bypass', addr: 1029, reason: 'x x x', minutes: 60 }).ok).toBe(false);
+  });
+
+  it('caps bypass time at 24 hours', () => {
+    const { e } = make();
+    e.dispatch({ t: 'login', password: '1234' });
+    expect(e.dispatch({ t: 'bypass', addr: 1046, reason: 'Contractor works', minutes: 25 * 60 }).ok).toBe(false);
+  });
+});
+
+describe('panel link failure', () => {
+  it('freezes data and blocks commands until the link returns', () => {
+    const { e, advance } = make('clean');
+    e.dispatch({ t: 'sim', action: { a: 'link', ok: false } });
+    e.dispatch({ t: 'sim', action: { a: 'device', address: 1046, mode: 'smoke' } });
+    for (let i = 0; i < 10; i++) {
+      advance(1000);
+      e.tick();
+    }
+    expect(e.counts().fire).toBe(0); // frozen
+    expect(e.dispatch({ t: 'keyswitch', on: true }).ok).toBe(false);
+    e.dispatch({ t: 'sim', action: { a: 'link', ok: true } });
+    for (let i = 0; i < 10; i++) {
+      advance(1000);
+      e.tick();
+    }
+    expect(e.counts().fire).toBe(1);
+  });
+});

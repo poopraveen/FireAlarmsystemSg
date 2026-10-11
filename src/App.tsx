@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bypass } from './components/Bypass.tsx';
 import { Events } from './components/Events.tsx';
 import { Mimic } from './components/Mimic.tsx';
 import { Panel } from './components/Panel.tsx';
 import { Points } from './components/Points.tsx';
 import { Simulator } from './components/Simulator.tsx';
+import { hhmm } from './engine/lcd.ts';
 import type { Command, CommandResult } from './engine/types.ts';
 import type { PanelView } from './engine/view.ts';
 import { RemoteSource, SimSource, type ConnStatus, type PanelSource } from './source/source.ts';
 
-type Tab = 'mimic' | 'points' | 'events' | 'sim' | 'conn';
+type Tab = 'mimic' | 'points' | 'bypass' | 'events' | 'sim' | 'conn';
 interface Settings {
   mode: 'sim' | 'remote';
   url: string;
@@ -82,6 +84,15 @@ function describe(cmd: Command): { title: string; body: string; ok: string; dang
       ok: cmd.disabled ? 'Disable' : 'Enable',
       danger: cmd.disabled,
     };
+  if (cmd.t === 'bypass')
+    return {
+      title: `Bypass point ${cmd.addr} for ${cmd.minutes >= 60 ? `${cmd.minutes / 60} h` : `${cmd.minutes} min`}?`,
+      body: `Reason: ${cmd.reason}. While bypassed this device will NOT detect fire. It is re-enabled automatically when the time ends.`,
+      ok: 'Bypass',
+      danger: true,
+    };
+  if (cmd.t === 'unbypass')
+    return { title: `Restore point ${cmd.addr}?`, body: 'Ends the bypass. The device reports fire and fault again; if it is still faulty the fault returns.', ok: 'Restore' };
   if (cmd.t === 'sim' && cmd.action.a === 'preset') return { title: 'Load preset?', body: 'Replaces the simulated panel state.', ok: 'Load' };
   return null;
 }
@@ -98,7 +109,14 @@ export default function App() {
   const [pw, setPw] = useState('');
   const [toast, setToast] = useState<{ text: string; bad: boolean } | null>(null);
   const [audio, setAudio] = useState(false);
+  const [lastAt, setLastAt] = useState(0);
+  const [clock, setClock] = useState(() => Date.now());
   const src = useRef<PanelSource | null>(null);
+
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     store.set('zp3.settings', settings);
@@ -106,7 +124,10 @@ export default function App() {
       settings.mode === 'sim' ? new SimSource(settings.operator || 'demo') : new RemoteSource(settings.url, settings.token, settings.operator || 'operator');
     src.current = s;
     setView(undefined);
-    const u1 = s.subscribe(setView);
+    const u1 = s.subscribe((v) => {
+      setView(v);
+      setLastAt(Date.now());
+    });
     const u2 = s.onStatus(setStatus);
     return () => {
       u1();
@@ -129,12 +150,19 @@ export default function App() {
   }, []);
 
   const access = view?.access ?? 1;
+  // Last-known mode: the gateway is unreachable but we still hold its last view.
+  const stale = settings.mode === 'remote' && status.state !== 'online' && !!view;
+  const linkDown = !!view && !view.state.link.panel;
 
   const send = useCallback(
     (cmd: Command) => {
+      if (stale) {
+        setToast({ text: 'Not connected - showing last known status. Operate at the panel.', bad: true });
+        return;
+      }
       const d = describe(cmd);
       const needs2 = cmd.t === 'key' && ['RESET', 'SILENCE', 'SOUND', 'SOUNDERS', 'DAY_NIGHT'].includes(cmd.key);
-      const needs3 = cmd.t === 'setDisabled';
+      const needs3 = cmd.t === 'setDisabled' || cmd.t === 'bypass' || cmd.t === 'unbypass';
       if (!d) {
         void raw(cmd);
         return;
@@ -166,7 +194,7 @@ export default function App() {
       }
       setConfirm({ ...d, run: () => void raw(cmd) });
     },
-    [access, raw],
+    [access, raw, stale],
   );
 
   // Buzzer audio (only after the user turns it on - browsers need a click first).
@@ -198,6 +226,7 @@ export default function App() {
       [
         ['mimic', 'Master mimic'],
         ['points', 'Diagnostics'],
+        ['bypass', 'Bypass'],
         ['events', 'Event log'],
         ...(settings.mode === 'sim' || (status.state === 'online' && status.driver.includes('mock')) ? [['sim', 'Simulator']] : []),
         ['conn', 'Connection'],
@@ -269,7 +298,23 @@ export default function App() {
           )}
         </div>
       ) : (
-        <div className="main">
+        <>
+        {stale && (
+          <div className="banner bad" role="alert">
+            Gateway not reachable. Showing last known status from {hhmm(lastAt)} ({Math.round((clock - lastAt) / 1000)} s ago). Controls are off;
+            operate at the panel. {status.state === 'offline' ? status.reason : 'Reconnecting…'}
+          </div>
+        )}
+        {linkDown && !stale && (
+          <div className="banner" role="alert">
+            Panel link down since {hhmm(view.state.link.since)}: the gateway gets no data from the panel (cable or interface card). Values
+            are frozen and commands are blocked. Operate at the panel and call FPC (6258 5191, after hours 9126 1188).
+          </div>
+        )}
+        {status.state === 'online' && status.backup && (
+          <div className="banner">Main gateway down. Connected through the backup gateway ({status.url}).</div>
+        )}
+        <div className={'main' + (stale || linkDown ? ' stale' : '')}>
           <div style={{ display: 'grid', gap: 14, minWidth: 0 }}>
             <Panel view={view} send={send} />
             <section className="card">
@@ -340,18 +385,21 @@ export default function App() {
                 <button key={t} role="tab" className="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
                   {label}
                   {t === 'events' && <span className="n">{view.state.events.length}</span>}
+                  {t === 'bypass' && view.state.bypasses.length > 0 && <span className="n">{view.state.bypasses.length}</span>}
                 </button>
               ))}
             </div>
             <div className="card-b">
               {tab === 'mimic' && <Mimic view={view} send={send} onSelect={select} selected={selected} />}
               {tab === 'points' && <Points view={view} send={send} selected={selected} onSelect={setSelected} simAllowed={simAllowed} />}
+              {tab === 'bypass' && <Bypass view={view} send={send} onSelect={select} />}
               {tab === 'events' && <Events events={view.state.events} />}
               {tab === 'sim' && <Simulator view={view} send={send} />}
-              {tab === 'conn' && <Connection settings={settings} onApply={setSettings} status={status} />}
+              {tab === 'conn' && <Connection settings={settings} onApply={setSettings} status={status} view={view} lastAt={lastAt} now={clock} />}
             </div>
           </section>
         </div>
+        </>
       )}
 
       {confirm && (
@@ -398,7 +446,60 @@ export default function App() {
   );
 }
 
-function Connection({ settings, onApply, status }: { settings: Settings; onApply: (s: Settings) => void; status: ConnStatus }) {
+function Health({ status, view, lastAt, now, mode }: { status: ConnStatus; view: PanelView; lastAt: number; now: number; mode: Settings['mode'] }) {
+  const sys = view.state.system;
+  const age = Math.round((now - lastAt) / 1000);
+  const appOk = mode === 'sim' || status.state === 'online';
+  const rows: [string, 'ok' | 'bad' | 'warn', string, string][] = [
+    [
+      'App to gateway',
+      appOk ? (status.state === 'online' && status.backup ? 'warn' : 'ok') : 'bad',
+      mode === 'sim' ? 'Built-in simulator, no gateway needed' : status.state === 'online' ? `Online${status.backup ? ' via backup' : ''} · ${status.url ?? ''}` : status.state === 'offline' ? status.reason : 'Connecting…',
+      appOk ? 'Connected' : 'Down',
+    ],
+    [
+      'Gateway to panel (serial link)',
+      view.state.link.panel ? 'ok' : 'bad',
+      view.state.link.panel ? 'Receiving panel data' : `No data since ${hhmm(view.state.link.since)} - check cable and interface card`,
+      view.state.link.panel ? 'Connected' : 'Down',
+    ],
+    ['Panel mains power', sys.mains ? 'ok' : 'bad', sys.mains ? '230 V supply present' : 'Running on batteries', sys.mains ? 'OK' : 'Failed'],
+    ['Panel batteries', sys.batteryV >= 24 ? 'ok' : sys.batteryV >= 23 ? 'warn' : 'bad', `${sys.batteryV.toFixed(2)} V (2 × 12 V 18 Ah)`, sys.batteryV >= 23 ? 'OK' : 'Low'],
+    view.state.link.panel
+      ? ['Last update', age <= 5 ? 'ok' : age <= 30 ? 'warn' : 'bad', `${age} s ago`, age <= 5 ? 'Live' : 'Stale']
+      : ['Last update', 'bad', `Panel data frozen since ${hhmm(view.state.link.since)}`, 'Frozen'],
+  ];
+  return (
+    <div className="health">
+      {rows.map(([name, st, detail, word]) => (
+        <div className="hrow" key={name}>
+          <i className={`hdot ${st}`} />
+          <div style={{ minWidth: 0 }}>
+            <b>{name}</b>
+            <div className="muted small">{detail}</div>
+          </div>
+          <span className={`chip ${st === 'ok' ? 'ok' : st === 'warn' ? 'fault' : 'fire'}`}>{word}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Connection({
+  settings,
+  onApply,
+  status,
+  view,
+  lastAt,
+  now,
+}: {
+  settings: Settings;
+  onApply: (s: Settings) => void;
+  status: ConnStatus;
+  view: PanelView;
+  lastAt: number;
+  now: number;
+}) {
   const [s, setS] = useState(settings);
   return (
     <form
@@ -408,6 +509,9 @@ function Connection({ settings, onApply, status }: { settings: Settings; onApply
       }}
       style={{ display: 'grid', gap: 12 }}
     >
+      <div className="section-t" style={{ marginTop: 0 }}>Connection health</div>
+      <Health status={status} view={view} lastAt={lastAt} now={now} mode={settings.mode} />
+      <div className="section-t">Settings</div>
       <div className="grid2">
         <label className="field">
           Data source
@@ -421,7 +525,7 @@ function Connection({ settings, onApply, status }: { settings: Settings; onApply
           <input id="cn-op" value={s.operator} onChange={(e) => setS({ ...s, operator: e.target.value })} />
         </label>
         <label className="field">
-          Gateway URL
+          Gateway URLs (main first, backups after a comma)
           <input id="cn-url" className="mono" value={s.url} disabled={s.mode === 'sim'} onChange={(e) => setS({ ...s, url: e.target.value })} />
         </label>
         <label className="field">
@@ -436,6 +540,11 @@ function Connection({ settings, onApply, status }: { settings: Settings; onApply
         <span className="muted small">
           Status: {status.state === 'online' ? `online · ${status.driver} · ${status.role}` : status.state === 'offline' ? status.reason : 'connecting'}
         </span>
+      </div>
+      <div className="note">
+        If the main gateway stops answering, the app tries the next address in the list automatically. If none answers, it keeps
+        showing the last known panel status, marked with its age, and blocks all commands. It never switches to simulated data while
+        connected to a real panel.
       </div>
       <div className="note">
         The remote gateway (<span className="mono">npm run gateway</span>) streams the panel and accepts commands with token login,

@@ -21,11 +21,11 @@ const TYPE: Record<Point['type'], string> = {
 
 const CH = ['A1 live', 'A2 previous', 'A3 compensation', 'A4 status', 'A5 type code', 'A6 flags'];
 
-function Cond({ p }: { p: Point }) {
+function Cond({ p, bypassed }: { p: Point; bypassed?: boolean }) {
   return (
     <span className="row" style={{ gap: 4 }}>
       <span className={`cond ${p.cond}`}>{p.cond === 'PreAlarm' ? 'Pre-alarm' : p.cond}</span>
-      {p.disabled && <span className="cond Disabled">Disabled</span>}
+      {p.disabled && <span className="cond Disabled">{bypassed ? 'Bypassed' : 'Disabled'}</span>}
     </span>
   );
 }
@@ -115,6 +115,7 @@ export function Points({ view, send, selected, onSelect, simAllowed }: Props) {
   }, [points, q, zone, status]);
 
   const sel = points.find((p) => p.address === selected);
+  const byp = new Set(view.state.bypasses.map((b) => b.address));
   const zname = (n: number) => zones.find((z) => z.number === n)?.name ?? '';
 
   return (
@@ -154,7 +155,7 @@ export function Points({ view, send, selected, onSelect, simAllowed }: Props) {
                 Z{String(sel.zone).padStart(3, '0')} {zname(sel.zone)} · {TYPE[sel.type]} · ID “{sel.id}” · {sel.desc}
               </div>
             </div>
-            <Cond p={sel} />
+            <Cond p={sel} bypassed={byp.has(sel.address)} />
           </div>
           {sel.faultText && sel.cond === 'Fault' && <div className="note">{sel.faultText}</div>}
           <div className="kv">
@@ -175,12 +176,18 @@ export function Points({ view, send, selected, onSelect, simAllowed }: Props) {
           </div>
           <Spark data={hist.current.get(sel.address) ?? [sel.analogs[0]]} thresh={sel.thresh} />
           <div className="row">
-            <button
-              className="btn sm"
-              onClick={() => send({ t: 'setDisabled', target: 'point', addr: sel.address, disabled: !sel.disabled })}
-            >
-              {sel.disabled ? 'Enable point' : 'Disable point'}
-            </button>
+            {byp.has(sel.address) ? (
+              <button className="btn sm" onClick={() => send({ t: 'unbypass', addr: sel.address })}>
+                End bypass
+              </button>
+            ) : (
+              <button
+                className="btn sm"
+                onClick={() => send({ t: 'setDisabled', target: 'point', addr: sel.address, disabled: !sel.disabled })}
+              >
+                {sel.disabled ? 'Enable point' : 'Disable point'}
+              </button>
+            )}
             {simAllowed &&
               SIM_FOR[sel.type].map(([m, label]) => (
                 <button key={m} className="btn sm" onClick={() => send({ t: 'sim', action: { a: 'device', address: sel.address, mode: m } })}>
@@ -228,7 +235,7 @@ export function Points({ view, send, selected, onSelect, simAllowed }: Props) {
                     </span>
                   </td>
                   <td>
-                    <Cond p={p} />
+                    <Cond p={p} bypassed={byp.has(p.address)} />
                   </td>
                 </tr>
               );

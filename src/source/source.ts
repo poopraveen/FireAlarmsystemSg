@@ -5,9 +5,9 @@ import type { Command, CommandResult } from '../engine/types.ts';
 import type { PanelView } from '../engine/view.ts';
 
 export type ConnStatus =
-  | { state: 'connecting' }
-  | { state: 'online'; role: 'operator' | 'viewer'; driver: string; operator: string }
-  | { state: 'offline'; reason: string };
+  | { state: 'connecting'; url?: string }
+  | { state: 'online'; role: 'operator' | 'viewer'; driver: string; operator: string; url?: string; backup?: boolean }
+  | { state: 'offline'; reason: string; url?: string };
 
 export interface PanelSource {
   readonly kind: 'sim' | 'remote';
@@ -50,7 +50,12 @@ type ServerMsg =
   | { type: 'result'; id: number; result: CommandResult }
   | { type: 'error'; message: string };
 
-/** Connects to the gateway (server/gateway.ts) over WebSocket. */
+/**
+ * Connects to the gateway (server/gateway.ts) over WebSocket.
+ * `url` may list several gateways separated by commas: if one drops, the next
+ * is tried. While no gateway answers, the last view received stays available
+ * so the app can show it as last-known (stale) status.
+ */
 export class RemoteSource implements PanelSource {
   readonly kind = 'remote' as const;
   private ws?: WebSocket;
@@ -62,12 +67,15 @@ export class RemoteSource implements PanelSource {
   private status: ConnStatus = { state: 'connecting' };
   private closed = false;
   private retry?: ReturnType<typeof setTimeout>;
-  private url: string;
+  private urls: string[];
+  private idx = 0;
+  private failures = 0;
   private token: string;
   private operator: string;
 
   constructor(url: string, token: string, operator: string) {
-    this.url = url;
+    this.urls = url.split(/[\s,]+/).filter(Boolean);
+    if (this.urls.length === 0) this.urls = ['ws://localhost:8080/ws'];
     this.token = token;
     this.operator = operator;
     this.connect();
@@ -78,35 +86,64 @@ export class RemoteSource implements PanelSource {
     for (const cb of this.statuses) cb(s);
   }
 
+  private get url() {
+    return this.urls.at(this.idx % this.urls.length)!;
+  }
+
   private connect() {
-    this.setStatus({ state: 'connecting' });
+    const url = this.url;
+    this.setStatus({ state: 'connecting', url });
     let ws: WebSocket;
     try {
-      ws = new WebSocket(this.url);
+      ws = new WebSocket(url);
     } catch (e) {
-      this.setStatus({ state: 'offline', reason: String(e) });
+      this.setStatus({ state: 'offline', reason: String(e), url });
+      this.scheduleRetry();
       return;
     }
     this.ws = ws;
     ws.onopen = () => ws.send(JSON.stringify({ type: 'hello', token: this.token, operator: this.operator }));
     ws.onmessage = (ev) => {
       const msg = JSON.parse(String(ev.data)) as ServerMsg;
-      if (msg.type === 'welcome') this.setStatus({ state: 'online', role: msg.role, driver: msg.driver, operator: msg.operator });
+      if (msg.type === 'welcome') {
+        this.failures = 0;
+        this.setStatus({ state: 'online', role: msg.role, driver: msg.driver, operator: msg.operator, url, backup: this.idx % this.urls.length !== 0 });
+      }
       else if (msg.type === 'view') {
         this.last = msg.view;
         for (const cb of this.views) cb(msg.view);
       } else if (msg.type === 'result') {
         this.pending.get(msg.id)?.(msg.result);
         this.pending.delete(msg.id);
-      } else if (msg.type === 'error') this.setStatus({ state: 'offline', reason: msg.message });
+      } else if (msg.type === 'error') this.setStatus({ state: 'offline', reason: msg.message, url });
     };
-    ws.onclose = () => {
+    let ended = false;
+    // Some runtimes fire only 'error' (no 'close') when a connection is refused,
+    // so both events end this attempt, once.
+    ws.onerror = () => {
+      if (ws.readyState !== WebSocket.OPEN) end();
+    };
+    ws.onclose = () => end();
+    const end = () => {
+      if (ended || ws !== this.ws) return;
+      ended = true;
       for (const r of this.pending.values()) r({ ok: false, message: 'Connection lost' });
       this.pending.clear();
       if (this.closed) return;
-      if (this.status.state !== 'offline') this.setStatus({ state: 'offline', reason: 'Connection lost - retrying' });
-      this.retry = setTimeout(() => this.connect(), 3000);
+      const next = this.urls.length > 1 ? ' - trying backup gateway' : ' - retrying';
+      if (this.status.state !== 'offline' || !this.status.reason.startsWith('Invalid'))
+        this.setStatus({ state: 'offline', reason: `Gateway not reachable${next}`, url });
+      this.scheduleRetry();
     };
+  }
+
+  private scheduleRetry() {
+    if (this.closed) return;
+    clearTimeout(this.retry);
+    this.failures += 1;
+    this.idx += 1; // fail over to the next gateway in the list
+    const delay = Math.min(30_000, 2000 * Math.ceil(this.failures / this.urls.length));
+    this.retry = setTimeout(() => this.connect(), delay);
   }
 
   subscribe(cb: (v: PanelView) => void) {
