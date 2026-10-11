@@ -29,7 +29,7 @@ export function Events({ events }: { events: PanelEvent[] }) {
         {list.map((e) => (
           <div className="ev" key={e.seq}>
             <time>{stamp(e.time)}</time>
-            <span className={`k ${e.kind}`}>{e.kind}</span>
+            <span className={`evk ${e.kind}`}>{e.kind}</span>
             <span style={{ minWidth: 0 }}>
               {e.text}
               {e.detail && <span className="muted"> · {e.detail}</span>}

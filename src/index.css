@@ -538,23 +538,23 @@ tbody tr:hover td {
   color: var(--muted);
   font-size: 12px;
 }
-.ev .k {
+.ev .evk {
   font: 600 11px/1.6 var(--f-body);
 }
-.ev .k.FIRE {
+.ev .evk.FIRE {
   color: var(--fire);
 }
-.ev .k.FAULT {
+.ev .evk.FAULT {
   color: var(--fault);
 }
-.ev .k.RESET,
-.ev .k.SILENCE,
-.ev .k.SOUND,
-.ev .k.ACCESS {
+.ev .evk.RESET,
+.ev .evk.SILENCE,
+.ev .evk.SOUND,
+.ev .evk.ACCESS {
   color: var(--info);
 }
-.ev .k.DISABLE,
-.ev .k.ENABLE {
+.ev .evk.DISABLE,
+.ev .evk.ENABLE {
   color: var(--disabled);
 }
 @media (max-width: 520px) {
