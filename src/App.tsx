@@ -35,6 +35,9 @@ const store = {
 };
 
 function defaultUrl() {
+  // Set VITE_GATEWAY_URL (e.g. wss://zp3-gateway.example.com/ws) in Vercel to point the hosted app at a gateway.
+  const env = import.meta.env.VITE_GATEWAY_URL as string | undefined;
+  if (env) return env;
   try {
     if (location.protocol.startsWith('http') && !location.hostname.endsWith('claude.ai') && location.port)
       return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;

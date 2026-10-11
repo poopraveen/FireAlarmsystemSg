@@ -29,6 +29,18 @@ OPERATOR_TOKEN=change-me VIEWER_TOKEN=view-only MAINT_PASSWORD=1234 npm run gate
 
 Demo credentials: operator token `operator-demo`, viewer token `viewer-demo`, maintenance password `1234`.
 
+## Deploy to Vercel
+
+The web app is a static Vite build, so Vercel hosts it as-is (`vercel.json` is included):
+
+1. vercel.com → **Add New → Project** → import `poopraveen/FireAlarmsystemSg`.
+2. Leave the detected settings (Vite, `npm run build`, output `dist`) and click **Deploy**.
+
+The hosted app opens in simulator mode, so the demo works with no server.
+Vercel cannot host the WebSocket gateway (serverless functions do not keep WebSocket connections open).
+For remote mode, run `npm run gateway` on a host that supports WebSockets (Render, Railway, Fly.io, an Azure/AWS VM),
+then set `VITE_GATEWAY_URL=wss://<your-gateway>/ws` in the Vercel project's environment variables and redeploy.
+
 ## What's in the app
 
 | Area | What it does |
